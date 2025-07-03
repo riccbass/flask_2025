@@ -51,11 +51,24 @@ BANDS = [
 
 @app.get('/bands')
 # a vantagem de usar o pydantic é que já valida a data
-async def bands() -> list[Band]:
+# se não no url da rota mas tá no parâmetro, é query param ?
+# se tem o query parameter, precisa do default caso contrário vai dar erro
+async def bands(genre: GenreURLChoices | None = None,
+                has_albums: bool = False
+                ) -> list[Band]:
 
-    return [
-        Band(**b) for b in BANDS
-    ]
+    band_list = [Band(**b) for b in BANDS]
+
+    if genre:
+        band_list = [
+            b for b in band_list if b.genre.lower() == genre.value
+        ]
+
+    if has_albums:
+
+        band_list = [b for b in band_list if len(b.albums) > 0]
+
+    return band_list
 
 
 @app.get('/bands/{band_id}', status_code=206)
@@ -66,14 +79,6 @@ async def band(band_id: int) -> Band:
         raise HTTPException(status_code=404, detail='Band not fund')
 
     return band
-
-
-@app.get('/bands/genre/{genre}')
-async def bands_for_genre(genre: GenreURLChoices) -> list[dict]:
-
-    return [
-        b for b in BANDS if b['genre'].lower() == genre.value
-    ]
 
 
 @app.get('/about')
