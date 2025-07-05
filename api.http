@@ -2,7 +2,7 @@ POST http://localhost:8000/bands/
 Content-Type: application/json
 
 {
-  "name": "Faith no More",
+  "name": "Faith no More2",
   "genre": "rock"
 }
 
@@ -22,10 +22,6 @@ Content-Type: application/json
   "name": "Gojira",
   "genre": "Metal",
   "albums": [
-    {
-      "title": "L'Enfant Sauvage",
-      "release_date": "2012-06-26"
-    },
     {
       "title": "Magma",
       "release_date": "2016-06-17"

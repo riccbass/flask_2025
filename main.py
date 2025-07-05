@@ -1,52 +1,22 @@
 # https://www.youtube.com/watch?v=Lw-zLopB3o0&list=PL-2EBeDYMIbQghmnb865lpdmYyWU3I5F1
 
-from fastapi import FastAPI, HTTPException
-from schemas import GenreURLChoices, BandBase, BandCreate, BandWithID
+from fastapi import FastAPI, HTTPException, Depends
+from models import GenreURLChoices, BandBase, BandCreate, Band, Album
+from typing import Annotated
+from sqlmodel import Session, select
+from contextlib import asynccontextmanager
+from db import init_db, get_session
 
-app = FastAPI()
+from datetime import datetime
 
-BANDS = [
-    {
-        'id': 1,
-        'name': 'Iron Maiden',
-        'genre': 'Rock',
-        'albums': [
-            {
-                'title': 'Iron Maiden',
-                'release_date': '1971-07-21'
-            },
-            {
-                'title': 'Killers',
-                'release_date': '1980-06-12',
-            }
-        ]
-    },
-    {
-        'id': 2,
-        'name': 'Metallica',
-        'genre': 'Metal'
-    },
-    {
-        'id': 3,
-        'name': 'Pink Floyd',
-        'genre': 'Progressive Rock'
-    },
-    {
-        'id': 4,
-        'name': 'Led Zeppelin',
-        'genre': 'Hard Rock'
-    },
-    {
-        'id': 5,
-        'name': 'The Beatles',
-        'genre': 'Pop Rock'
-    },
-    {
-        'id': 6,
-        'name': 'AC/DC',
-        'genre': 'Rock'
-    }
-]
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get('/bands')
@@ -54,10 +24,12 @@ BANDS = [
 # se não no url da rota mas tá no parâmetro, é query param ?
 # se tem o query parameter, precisa do default caso contrário vai dar erro
 async def bands(genre: GenreURLChoices | None = None,
-                has_albums: bool = False
-                ) -> list[BandWithID]:
+                has_albums: bool = False,
+                session: Session = Depends(get_session)
+                ) -> list[Band]:
 
-    band_list = [BandWithID(**b) for b in BANDS]
+    # ele pede para converter para lista
+    band_list = list(session.exec(select(Band)).all())
 
     if genre:
         band_list = [
@@ -72,8 +44,9 @@ async def bands(genre: GenreURLChoices | None = None,
 
 
 @app.get('/bands/{band_id}', status_code=206)
-async def band(band_id: int) -> BandWithID:
-    band = next((BandWithID(**b) for b in BANDS if b['id'] == band_id), None)
+async def band(band_id: int, session: Session = Depends(get_session)) -> Band:
+
+    band = session.get(Band, band_id)
 
     if band is None:
         raise HTTPException(status_code=404, detail='Band not fund')
@@ -81,17 +54,26 @@ async def band(band_id: int) -> BandWithID:
     return band
 
 
-@app.get('/about')
-# o tipo tem que ser correto
-async def about() -> str:
-    return 'A great company'
-
-
 @app.post("/bands")
-async def create_band(band_data: BandCreate) -> BandWithID:
+async def create_band(
+    band_data: BandCreate,
+    session: Session = Depends(get_session)
+) -> Band:
 
-    id = BANDS[-1]['id'] + 1
-    band = BandWithID(id=id, **band_data.model_dump())
-    BANDS.append(band.model_dump())
+    band = Band(name=band_data.name, genre=band_data.genre)
+    session.add(band)
+
+    if band_data.albums:
+        for album in band_data.albums:
+
+            album_obj = Album(
+                title=album.title, release_date=album.release_date, band=band, band_id=None
+            )
+
+            session.add(album_obj)
+
+    session.commit()
+    # com esse refresh já pega os dadaos do banco, com id
+    session.refresh(band)
 
     return band
